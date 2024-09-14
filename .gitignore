@@ -1,0 +1,15 @@
+/*
+**/__pycache__/
+!.gitignore
+!README.md
+!LICENSE
+!/assets/
+
+
+# airflow
+!docker-compose.yaml
+
+# specific project
+!/dags/
+/dags/*
+!/dags/spotify/
