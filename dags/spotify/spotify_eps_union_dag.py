@@ -1,7 +1,6 @@
 import os
 import tempfile
 import pandas as pd
-from datetime import date
 from pendulum import datetime, duration
 from airflow.decorators import dag, task
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
@@ -11,6 +10,7 @@ from airflow.models import Variable
 s3_bucket = Variable.get("SP_S3_BUCKET")
 s3_key = 'top-podcasts/'
 s3_union_key = 'top-podcasts-union/'
+
 
 @task
 def union_parquet_files(s3_key: str, s3_bucket: str, s3_union_key: str):
@@ -24,18 +24,21 @@ def union_parquet_files(s3_key: str, s3_bucket: str, s3_union_key: str):
             with tempfile.NamedTemporaryFile() as tmpfile:
                 obj.download_file(tmpfile.name)
                 df = pd.read_parquet(tmpfile.name)
-                
+
                 df_list.append(df)
 
     union_df = pd.concat(df_list, ignore_index=True)
-    
+
     csv_s3_key = os.path.join(s3_union_key, "top_podcasts.csv")
-    
+
     with tempfile.NamedTemporaryFile(suffix=".csv") as tmpfile:
         union_df.to_csv(tmpfile.name, index=False)
-        s3.load_file(filename=tmpfile.name, key=csv_s3_key, bucket_name=s3_bucket, replace=True)
-    
-    print(f"Union of Parquet files saved as CSV in s3://{s3_bucket}/{csv_s3_key}")
+        s3.load_file(filename=tmpfile.name, key=csv_s3_key,
+                     bucket_name=s3_bucket, replace=True)
+
+    print(
+        f"Union of Parquet files saved as CSV in s3://{s3_bucket}/{csv_s3_key}")
+
 
 @dag(
     start_date=datetime(2024, 9, 1),
