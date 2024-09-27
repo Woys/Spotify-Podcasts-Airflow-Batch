@@ -11,9 +11,9 @@ from airflow.utils.trigger_rule import TriggerRule
 
 S3_BUCKET = Variable.get("SP_S3_BUCKET")
 S3_KEY = 'top-podcasts-union/'
-DATASET_ID = "daniilmiheev/top-spotify-podcasts-daily"
+DATASET_ID = "daniilmiheev/top-spotify-podcasts-daily-updated"
 FILE_NAME = "top_podcasts.csv"
-DATASET_TITLE = "Top Spotify Podcast Episodes (Daily updated)"
+DATASET_TITLE = "Top Spotify Podcast Episodes (Daily Updated)"
 LICENSE = "CC0-1.0"
 
 
