@@ -36,7 +36,7 @@ def upload_to_s3(file_path: str, s3_key: str, s3_bucket: str):
 @dag(
     start_date=datetime(2024, 9, 1),
     max_active_runs=1,
-    schedule="05 20 * * *",
+    schedule="10 20 * * *",
     default_args={"retries": 2, "retry_delay": duration(minutes=1)},
     catchup=False,
 )

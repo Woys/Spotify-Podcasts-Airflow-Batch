@@ -72,7 +72,7 @@ def cleanup_temp_dir(tmp_dir: str):
 @dag(
     start_date=datetime(2024, 9, 1),
     max_active_runs=1,
-    schedule="10 20 * * *",
+    schedule="30 20 * * *",
     default_args={"retries": 2, "retry_delay": duration(minutes=1)},
     catchup=False,
 )
