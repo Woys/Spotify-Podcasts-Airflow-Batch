@@ -1,10 +1,10 @@
 # Spotify Airflow Pipline
 
-**Tools & Tech Stack:** Python, Apache Airflow, AWS S3, Pandas, Spotify API
+**Tools & Tech Stack:** Python, Apache Airflow, AWS S3, Pandas, Spotify API, Docker
 
 **TL;DR:** Daily ingestion of Spotify's top podcast episodes across various regions, orchestrated using Apache Airflow and stored in AWS S3 Unploded to Kaggle
 
-**Daily Updated Kaggle Dataset:** [https://www.kaggle.com/datasets/daniilmiheev/top-spotify-podcasts-daily-updated](https://www.kaggle.com/datasets/daniilmiheev/top-spotify-podcasts-daily-updated)
+**Daily Updated Kaggle Dataset:** [https://www.kaggle.com](https://www.kaggle.com/datasets/daniilmiheev/top-spotify-podcasts-daily-updated)
 
 ## Sources
 
