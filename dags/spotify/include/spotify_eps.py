@@ -5,6 +5,7 @@ from requests import post, get, exceptions
 import json
 import pandas as pd
 from datetime import date
+import logging
 
 class SpotifyAPI:
     def __init__(self):
@@ -112,10 +113,15 @@ class SpotifyAPI:
 
             search_json = self.episode_data[episodeUris]
 
-            if not search_json['episodes']:
-                raise ValueError(f"No episodes found in batch starting at index {i}. Possible API issue or invalid episode IDs.")
-
+            if not search_json or 'episodes' not in search_json or not search_json['episodes']:
+                logging.warning(f"No episodes found in batch starting at index {i}. Skipping this batch.")
+                continue  # Skip to the next batch
+            
             for episode in search_json['episodes']:
+                if not episode or 'id' not in episode:
+                    logging.warning(f"Missing data for an episode in batch starting at index {i}. Skipping this episode.")
+                    continue
+
                 data = {
                     "id": episode["id"],
                     "name": episode["name"],
