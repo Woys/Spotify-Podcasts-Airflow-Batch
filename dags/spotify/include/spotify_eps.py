@@ -94,14 +94,13 @@ class SpotifyAPI:
             df_result = pd.concat([df_result, chart_df], ignore_index=True)
         return df_result
 
-    def get_transformed_search_eps(self, **kwargs: str) -> pd.DataFrame: # chart: str = "top_episodes", region: str = "us") -> pd.DataFrame:
-        if "chart_file" in kwargs:
-            podcastchart_data = pd.read_parquet(kwargs.get("chart_file"))
-            episodeUris_list = podcastchart_data['episodeUri'].tolist() #.apply(lambda x: x[16:]).tolist()
-        elif "chart" in kwargs and "region" in kwargs:
+    def get_transformed_search_eps(self, **kwargs: str) -> pd.DataFrame:
+        if "chart" in kwargs and "region" in kwargs:
             self._fetch_podcastchart(kwargs.get("chart"), kwargs.get("region"))
             episodeUris_list = [item["episodeUri"][16:] for item in self.podcastchart_data]
-        else:   
+        elif "chart_file" in kwargs:
+            episodeUris_list = kwargs.get("episodeUris_list")
+        else:
             raise ValueError(f"get_transformed_search_eps has no chart,region, or chart_file in kwargs: {kwargs}")
         
         columns = [
@@ -116,7 +115,7 @@ class SpotifyAPI:
         for i in range(0, len(episodeUris_list), 50):
             episodeUris_selected = episodeUris_list[i:i + 50]
             episodeUris = ",".join(episodeUris_selected)
-            self._fetch_episodes(episodeUris)
+            self._fetch_episodes(episodeUris,kwargs.get("region"))
 
             search_json = self.episode_data[episodeUris]
 
@@ -159,18 +158,20 @@ class SpotifyAPI:
 
         return df_result
     
-    def get_charts_eps_file(self, chart_file: str) -> pd.DataFrame:
+    def get_charts_eps_file(self, chart_file: str, regions: list = ["us"]) -> pd.DataFrame:
         df_result = pd.DataFrame()
-        chart_df = pd.read_parquet(chart_file)
-        eps_df = self.get_transformed_search_eps(chart_file=chart_file)
-        
-        merged_df = pd.merge(chart_df, eps_df, left_on='episodeUri', right_on='id', how='left')
+        chart_df_all_regions = pd.read_parquet(chart_file)
+        for region in regions:
+            chart_df = chart_df_all_regions.loc[chart_df_all_regions['region'] == region]
+            episodeUris_list = chart_df['episodeUri'].tolist()
+            eps_df = self.get_transformed_search_eps(chart_file=chart_file, region=region, episodeUris_list=episodeUris_list)
+            merged_df = pd.merge(chart_df, eps_df, left_on='episodeUri', right_on='id', how='left')
 
-        name_mismatch = merged_df[merged_df['episodeName'] != merged_df['name']]
-        if not name_mismatch.empty:
-                raise ValueError("Name mismatch found between chart data and episode data.")
+            name_mismatch = merged_df[merged_df['episodeName'] != merged_df['name']]
+            if not name_mismatch.empty:
+                    raise ValueError("Name mismatch found between chart data and episode data.")
 
-        df_result = pd.concat([df_result, merged_df], ignore_index=True)
+            df_result = pd.concat([df_result, merged_df], ignore_index=True)
         df_result = df_result.drop(columns=['id','name'])
         return df_result
 
