@@ -4,7 +4,8 @@ from datetime import date
 from pendulum import datetime, duration
 from airflow.sdk import dag, task
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
-from spotify.include.spotify_eps import SpotifyAPI
+from include.notification import notify_dag_failure
+from include.spotify.spotify_eps import SpotifyAPI
 from airflow.sdk import Variable
 
 s3_bucket = Variable.get("SP_S3_BUCKET")
@@ -39,6 +40,7 @@ def upload_to_s3(file_path: str, s3_key: str, s3_bucket: str):
     schedule="10 20 * * *",
     default_args={"retries": 2, "retry_delay": duration(minutes=1)},
     catchup=False,
+    on_failure_callback=notify_dag_failure,
 )
 def spotify_charts():
     file_path = spotify_chart_load(regions)
@@ -49,4 +51,3 @@ def spotify_charts():
 
 
 spotify_charts()
-

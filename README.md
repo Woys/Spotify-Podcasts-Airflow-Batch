@@ -59,8 +59,55 @@ Canonical schema fields:
 - `TI_NEWSAPI_LANGUAGE` (optional, default: `en`)
 - `TI_HN_ITEM_TYPE` (optional, one of: `story`, `comment`, `all`; default: `story`)
 - `TI_HN_USE_DATE_SORT` (optional boolean, default: `true`)
+- `OPENROUTER_API_KEY` (required by `spotify_dbt_qa`)
+- `TELEGRAM_APPRISE_URL` (recipient for generated Spotify dbt QA reports and failures)
 
 S3 uploads use Airflow connection id `aws_conn`.
+
+### Reusable email sender
+
+`include.notification.send_email` sends HTML through an Airflow SMTP connection:
+
+```python
+from include.notification import send_email
+
+send_email("<p>Pipeline completed</p>", "owner@example.com")
+```
+
+The default connection id is `smtp_default`, and the default subject is
+`Airflow notification`. Configure the SMTP host, port, credentials, TLS/SSL,
+and sender address with `AIRFLOW_CONN_SMTP_DEFAULT` in `.env`; do not put SMTP
+credentials in DAG code. Both the
+subject and connection id can be overridden with the `subject` and
+`smtp_conn_id` keyword arguments.
+
+The email helper remains available for DAGs that explicitly choose email. The
+current `spotify_dbt_qa` DAG sends its redacted report through Telegram.
+
+### Reusable Telegram sender
+
+`include.notification.send_telegram` sends a Telegram message through Apprise:
+
+```python
+from include.notification import send_telegram
+
+send_telegram("Pipeline completed", title="Spotify pipeline")
+```
+
+Store the complete Apprise Telegram URL in the `TELEGRAM_APPRISE_URL` Airflow
+Variable in `.env`:
+
+```dotenv
+AIRFLOW_VAR_TELEGRAM_APPRISE_URL=tgram://BOT_TOKEN/CHAT_ID
+```
+
+Every DAG uses this variable for one Telegram notification when a DAG run fails
+after retries are exhausted. When available, the message includes the failed
+task, error, and Airflow log URL.
+
+The URL can use Apprise's Telegram options, including multiple chat IDs and
+topics. To use a differently named Airflow Variable, pass its name with the
+`url_variable` keyword argument. Keep bot tokens out of DAG code and logs.
 
 ### Run
 

@@ -1,9 +1,14 @@
 kaggle==1.6.17
 pydantic == 2.12.5
-pytest>=8,<9
+pytest>=9.0.3,<10
 pytest-cov>=5,<7
 pandas==2.3.3
-apache-airflow==3.1.8
-apache-airflow-providers-amazon==9.23.0
+apache-airflow==3.3.1
+apache-airflow-providers-amazon==9.34.0
+apache-airflow-providers-smtp==3.0.3
+apprise==1.12.0
+dbt-core==1.12.3
+dbt-duckdb==1.11.0
+langchain-openrouter==0.2.7
 text-ingest @ git+https://github.com/Woys/text-ingest.git@afb0041c7ca4efe9333111b7c581e8ebc62d6501
-pypdf==6.0.0
+pypdf==6.15.0

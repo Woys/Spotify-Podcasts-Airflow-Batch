@@ -7,6 +7,11 @@
 !Dockerfile
 !Makefile
 !requirements.txt
+!.env.example
+!/include/
+!/include/**
+!/dbt/
+!/dbt/**
 
 # airflow
 !docker-compose.yaml

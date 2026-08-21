@@ -1,0 +1,10 @@
+duck_dbt:
+  target: prod
+  outputs:
+    prod:
+      type: duckdb
+      path: "{{ env_var('DBT_DUCKDB_PATH') }}"
+      extensions:
+        - httpfs
+        - parquet
+      threads: 4

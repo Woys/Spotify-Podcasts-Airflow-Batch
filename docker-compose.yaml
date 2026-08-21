@@ -20,11 +20,12 @@
 #
 # WARNING: This configuration is for local development. Do not use it in a production deployment.
 #
-# This configuration supports basic configuration using environment variables or an .env file
+# Compose interpolation and container variables come from the project-root .env.
+# Docker Compose loads this file automatically.
 # The following variables are supported:
 #
 # AIRFLOW_IMAGE_NAME           - Docker image name used to run Airflow.
-#                                Default: apache/airflow:3.1.8
+#                                Default: apache/airflow:3.3.1
 # AIRFLOW_UID                  - User ID in Airflow containers
 #                                Default: 50000
 # AIRFLOW_PROJ_DIR             - Base path to which all the files will be volumed.
@@ -49,25 +50,28 @@ x-airflow-common:
   # In order to add custom dependencies or upgrade provider packages you can use your extended image.
   # Comment the image line, place your Dockerfile in the directory where you placed the docker-compose.yaml
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
-  # image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.1.8}
+  # image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.3.1}
   build: .
+  env_file:
+    - path: ./.env
+      required: true
+      format: raw
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: "http://airflow-webserver:8080/execution/"
-    AIRFLOW__API__SECRET_KEY: ${AIRFLOW__API__SECRET_KEY}
-    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW__API_AUTH__JWT_SECRET}
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
-    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
+    AIRFLOW__API__SECRET_KEY: ${AIRFLOW__API__SECRET_KEY:?set AIRFLOW__API__SECRET_KEY in .env}
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW__API_AUTH__JWT_SECRET:?set AIRFLOW__API_AUTH__JWT_SECRET in .env}
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres/airflow
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres/airflow
     AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
-    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:?set AIRFLOW__CORE__FERNET_KEY in .env}
     AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
     AIRFLOW__WEBSERVER__SHOW_TRIGGER_FORM_IF_NO_PARAMS: 'true'
-    AIRFLOW__SECRETS__BACKEND: airflow.secrets.local_filesystem.LocalFilesystemBackend
-    AIRFLOW__SECRETS__BACKEND_KWARGS: '{"variables_file_path": "/opt/airflow/secrets/variables.yaml", "connections_file_path": "/opt/airflow/secrets/connections.yaml"}'
+    PYTHONPATH: /opt/airflow
     # yamllint disable rule:line-length
     # Use simple http server on scheduler for health checks
     # See https://airflow.apache.org/docs/apache-airflow/stable/administration-and-deployment/logging-monitoring/check-health.html#scheduler-health-check-server
@@ -80,12 +84,11 @@ x-airflow-common:
     # If you want to use it, outcomment it and replace airflow.cfg with the name of your config file
     # AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
   volumes:
-    - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags:z
+    - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags:ro,z
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
-    - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
-    - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
-    - ${AIRFLOW_PROJ_DIR:-.}/include:/opt/airflow/include
-    - ${AIRFLOW_PROJ_DIR:-.}/secrets:/opt/airflow/secrets
+    - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config:ro
+    - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins:ro
+    - ${AIRFLOW_PROJ_DIR:-.}/include:/opt/airflow/include:ro
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
@@ -99,7 +102,7 @@ services:
     image: postgres:13
     environment:
       POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: airflow
     volumes:
       - postgres-db-volume:/var/lib/postgresql/data
@@ -128,7 +131,7 @@ services:
     <<: *airflow-common
     command: api-server
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
       interval: 30s
@@ -216,12 +219,20 @@ services:
     command:
       - -c
       - |
+        if [[ "${_AIRFLOW_WWW_USER_USERNAME}" == "airflow" || "${_AIRFLOW_WWW_USER_USERNAME}" == "admin" ]]; then
+          echo "ERROR: Refusing to create a documented-default Airflow administrator." >&2
+          exit 1
+        fi
+        if (( $${#_AIRFLOW_WWW_USER_PASSWORD} < 20 )) || [[ "${_AIRFLOW_WWW_USER_PASSWORD}" == "airflow" ]]; then
+          echo "ERROR: _AIRFLOW_WWW_USER_PASSWORD must be unique and at least 20 characters." >&2
+          exit 1
+        fi
         if [[ -z "${AIRFLOW_UID}" ]]; then
           echo
           echo -e "\033[1;33mWARNING!!!: AIRFLOW_UID not set!\e[0m"
           echo "If you are on Linux, you SHOULD follow the instructions below to set "
           echo "AIRFLOW_UID environment variable, otherwise files will be owned by root."
-          echo "For other operating systems you can get rid of the warning with manually created .env file:"
+          echo "Set AIRFLOW_UID in the project-root .env file:"
           echo "    See: https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html#setting-the-right-airflow-user"
           echo
         fi
@@ -266,8 +277,8 @@ services:
       <<: *airflow-common-env
       _AIRFLOW_DB_MIGRATE: 'true'
       _AIRFLOW_WWW_USER_CREATE: 'true'
-      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME}
-      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD}
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:?set a non-default admin username in .env}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:?set a strong admin password in .env}
       _PIP_ADDITIONAL_REQUIREMENTS: ''
     user: "0:0"
     volumes:
@@ -295,7 +306,7 @@ services:
     profiles:
       - flower
     ports:
-      - "5555:5555"
+      - "127.0.0.1:5555:5555"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:5555/"]
       interval: 30s

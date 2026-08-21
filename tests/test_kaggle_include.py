@@ -4,7 +4,6 @@ import importlib
 import json
 from pathlib import Path
 import subprocess
-import sys
 from types import SimpleNamespace
 from unittest.mock import Mock
 from zipfile import ZipFile
@@ -12,16 +11,10 @@ from zipfile import ZipFile
 import pytest
 
 
-ROOT = Path(__file__).resolve().parents[1]
-DAGS_DIR = ROOT / "dags"
-if str(DAGS_DIR) not in sys.path:
-    sys.path.insert(0, str(DAGS_DIR))
-
-
 def _load_kaggle_module(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("AIRFLOW_VAR_KAGGLE_USERNAME", "kaggle-user")
     monkeypatch.setenv("AIRFLOW_VAR_KAGGLE_KEY", "kaggle-key")
-    module = importlib.import_module("spotify.include.kaggle")
+    module = importlib.import_module("include.spotify.kaggle")
     return importlib.reload(module)
 
 
@@ -117,18 +110,20 @@ def test_create_kaggle_dataset_runs_expected_commands(monkeypatch: pytest.Monkey
     monkeypatch.setattr(kaggle, "zip_and_delete_csv_files", zip_mock)
 
     run_mock = Mock(
-        side_effect=[
-            subprocess.CompletedProcess(args="ls", returncode=0, stdout="file\n", stderr=""),
-            subprocess.CompletedProcess(args="create", returncode=0, stdout="ok\n", stderr=""),
-        ]
+        return_value=subprocess.CompletedProcess(
+            args="create", returncode=0, stdout="ok\n", stderr=""
+        )
     )
     monkeypatch.setattr(kaggle.subprocess, "run", run_mock)
 
     kaggle.create_kaggle_dataset(str(tmp_path), logger)
 
     zip_mock.assert_called_once_with(str(tmp_path), logger)
-    assert run_mock.call_count == 2
-    assert "kaggle datasets create -p" in run_mock.call_args_list[1].args[0]
+    assert run_mock.call_count == 1
+    assert run_mock.call_args.args[0] == [
+        "kaggle", "datasets", "create", "-p", str(tmp_path)
+    ]
+    assert run_mock.call_args.kwargs["env"]["PYTHONWARNINGS"] == "ignore"
 
 
 def test_create_kaggle_dataset_wraps_subprocess_errors(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -137,10 +132,9 @@ def test_create_kaggle_dataset_wraps_subprocess_errors(monkeypatch: pytest.Monke
 
     monkeypatch.setattr(kaggle, "zip_and_delete_csv_files", Mock())
     run_mock = Mock(
-        side_effect=[
-            subprocess.CompletedProcess(args="ls", returncode=0, stdout="file\n", stderr=""),
-            subprocess.CalledProcessError(returncode=1, cmd="create", stderr="boom"),
-        ]
+        side_effect=subprocess.CalledProcessError(
+            returncode=1, cmd="create", stderr="boom"
+        )
     )
     monkeypatch.setattr(kaggle.subprocess, "run", run_mock)
 
@@ -154,18 +148,18 @@ def test_update_kaggle_dataset_runs_expected_commands(monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(kaggle, "zip_and_delete_csv_files", Mock())
     run_mock = Mock(
-        side_effect=[
-            subprocess.CompletedProcess(args="ls", returncode=0, stdout="file\n", stderr=""),
-            subprocess.CompletedProcess(args="version", returncode=0, stdout="ok\n", stderr=""),
-        ]
+        return_value=subprocess.CompletedProcess(
+            args="version", returncode=0, stdout="ok\n", stderr=""
+        )
     )
     monkeypatch.setattr(kaggle.subprocess, "run", run_mock)
 
     kaggle.update_kaggle_dataset(str(tmp_path), logger)
 
-    assert run_mock.call_count == 2
-    assert "kaggle datasets version -p" in run_mock.call_args_list[1].args[0]
-    assert "-r zip" in run_mock.call_args_list[1].args[0]
+    assert run_mock.call_count == 1
+    argv = run_mock.call_args.args[0]
+    assert argv[:5] == ["kaggle", "datasets", "version", "-p", str(tmp_path)]
+    assert argv[-2:] == ["-r", "zip"]
 
 
 def test_update_kaggle_dataset_wraps_subprocess_errors(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -174,10 +168,9 @@ def test_update_kaggle_dataset_wraps_subprocess_errors(monkeypatch: pytest.Monke
 
     monkeypatch.setattr(kaggle, "zip_and_delete_csv_files", Mock())
     run_mock = Mock(
-        side_effect=[
-            subprocess.CompletedProcess(args="ls", returncode=0, stdout="file\n", stderr=""),
-            subprocess.CalledProcessError(returncode=1, cmd="version", stderr="version failed"),
-        ]
+        side_effect=subprocess.CalledProcessError(
+            returncode=1, cmd="version", stderr="version failed"
+        )
     )
     monkeypatch.setattr(kaggle.subprocess, "run", run_mock)
 
@@ -195,7 +188,9 @@ def test_upload_kaggle_dataset_executes_download_command(monkeypatch: pytest.Mon
     kaggle.upload_kaggle_dataset("owner/dataset", logger)
 
     assert run_mock.call_count == 1
-    assert "kaggle datasets download owner/dataset" in run_mock.call_args.args[0]
+    assert run_mock.call_args.args[0] == [
+        "kaggle", "datasets", "download", "owner/dataset"
+    ]
 
 
 def test_upload_kaggle_dataset_wraps_subprocess_errors(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -8,7 +8,8 @@ from airflow.sdk import Variable
 from airflow.sdk import dag, get_current_context, task
 from pendulum import datetime, duration
 
-from research.include.research_pipeline import (
+from include.notification import notify_dag_failure
+from include.research.research_pipeline import (
     apply_openalex_key,
     apply_newsapi_key,
     bool_env,
@@ -207,6 +208,7 @@ def merge_daily_datasets(config: dict) -> dict:
     max_active_runs=1,
     default_args={"retries": 2, "retry_delay": duration(minutes=2)},
     catchup=False,
+    on_failure_callback=notify_dag_failure,
 )
 def text_daily_pipeline():
     config = build_ingestion_config()

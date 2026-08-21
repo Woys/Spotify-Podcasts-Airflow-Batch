@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from research.include import research_pipeline as rp
+from include.research import research_pipeline as rp
 
 
 def test_parse_search_terms_supports_json_and_csv() -> None:

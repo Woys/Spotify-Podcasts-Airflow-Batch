@@ -1,10 +1,13 @@
-.PHONY: help all install test test-verbose ci-test clean
+.PHONY: help all install test test-verbose ci-test clean \
+	airflow-config airflow-init airflow-up airflow-down airflow-status
 
 PYTHON ?= python
 PIP ?= $(PYTHON) -m pip
 PYTEST ?= $(PYTHON) -m pytest
+DOCKER_COMPOSE ?= docker compose
+AIRFLOW_COMPOSE = $(DOCKER_COMPOSE)
 
-AIRFLOW_VERSION ?= 3.1.8
+AIRFLOW_VERSION ?= 3.3.1
 
 # Match env defaults used in CI.
 export AIRFLOW_HOME ?= /tmp/airflow
@@ -22,6 +25,11 @@ help:
 	@echo "  make test-verbose Run pytest -vv"
 	@echo "  make ci-test      Install deps and run tests (same flow as CI)"
 	@echo "  make clean        Remove local test artifacts"
+	@echo "  make airflow-config Validate the Docker Compose configuration"
+	@echo "  make airflow-init Initialize the Airflow database and admin user"
+	@echo "  make airflow-up   Start Airflow in the background"
+	@echo "  make airflow-down Stop the Airflow stack"
+	@echo "  make airflow-status Show Airflow service status"
 
 all: ci-test
 
@@ -41,6 +49,21 @@ test-verbose:
 	$(PYTEST) -vv
 
 ci-test: install test
+
+airflow-config:
+	$(AIRFLOW_COMPOSE) config --quiet
+
+airflow-init: airflow-config
+	$(AIRFLOW_COMPOSE) up airflow-init
+
+airflow-up: airflow-config
+	$(AIRFLOW_COMPOSE) up -d
+
+airflow-down:
+	$(AIRFLOW_COMPOSE) down
+
+airflow-status:
+	$(AIRFLOW_COMPOSE) ps
 
 clean:
 	rm -rf .pytest_cache htmlcov

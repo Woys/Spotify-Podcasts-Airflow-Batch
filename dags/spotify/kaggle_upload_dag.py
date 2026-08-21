@@ -4,7 +4,8 @@ import tempfile
 from pendulum import datetime, duration
 from airflow.sdk import dag, task
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
-from spotify.include.kaggle import create_kaggle_metadata, create_kaggle_dataset
+from include.notification import notify_dag_failure
+from include.spotify.kaggle import create_kaggle_metadata, create_kaggle_dataset
 from airflow.sdk import Variable
 from airflow.utils.log.logging_mixin import LoggingMixin
 from airflow.task.trigger_rule import TriggerRule
@@ -75,6 +76,7 @@ def cleanup_temp_dir(tmp_dir: str):
     schedule=None,
     default_args={"retries": 2, "retry_delay": duration(minutes=1)},
     catchup=False,
+    on_failure_callback=notify_dag_failure,
 )
 def spotify_kaggle_upload():
     tmp_dir = create_temp_dir()

@@ -3,8 +3,6 @@ import logging
 
 import base64
 import json
-from pathlib import Path
-import sys
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -12,12 +10,7 @@ import pandas as pd
 import pytest
 
 
-ROOT = Path(__file__).resolve().parents[1]
-DAGS_DIR = ROOT / "dags"
-if str(DAGS_DIR) not in sys.path:
-    sys.path.insert(0, str(DAGS_DIR))
-
-import spotify.include.spotify_eps as spotify_eps
+import include.spotify.spotify_eps as spotify_eps
 
 
 def _episode_dict(episode_id: str, name: str) -> dict:
@@ -82,10 +75,13 @@ def test_init_reads_airflow_variables_and_token(monkeypatch: pytest.MonkeyPatch)
 def test_get_token_calls_spotify_accounts_endpoint(monkeypatch: pytest.MonkeyPatch, api: spotify_eps.SpotifyAPI) -> None:
     captured: dict[str, object] = {}
 
-    def fake_post(url: str, headers: dict, data: dict) -> SimpleNamespace:
+    def fake_post(
+        url: str, headers: dict, data: dict, timeout: int
+    ) -> SimpleNamespace:
         captured["url"] = url
         captured["headers"] = headers
         captured["data"] = data
+        captured["timeout"] = timeout
         return SimpleNamespace(content=json.dumps({"access_token": "abc"}).encode("utf-8"))
 
     monkeypatch.setattr(spotify_eps, "post", fake_post)
@@ -95,6 +91,7 @@ def test_get_token_calls_spotify_accounts_endpoint(monkeypatch: pytest.MonkeyPat
     assert token == "abc"
     assert captured["url"] == "https://accounts.spotify.com/api/token"
     assert captured["data"] == {"grant_type": "client_credentials"}
+    assert captured["timeout"] == 30
     expected_basic = base64.b64encode(b"client-id:client-secret").decode("utf-8")
     assert captured["headers"]["Authorization"] == f"Basic {expected_basic}"
 

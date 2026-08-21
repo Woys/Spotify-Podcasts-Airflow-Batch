@@ -1,3 +1,5 @@
+"""Pipeline helpers for research DAGs."""
+
 from __future__ import annotations
 
 import hashlib
@@ -13,7 +15,7 @@ from typing import Any
 import pandas as pd
 
 try:
-    from airflow.exceptions import AirflowException
+    from airflow.sdk.exceptions import AirflowException
 except Exception:  # pragma: no cover - keep module importable without full Airflow
     class AirflowException(Exception):
         pass

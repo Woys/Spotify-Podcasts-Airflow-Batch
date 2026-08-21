@@ -5,7 +5,9 @@ from datetime import date
 from pendulum import datetime, duration
 from airflow.sdk import dag, task
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
-from spotify.include.spotify_eps import SpotifyAPI
+from airflow.providers.standard.operators.trigger_dagrun import TriggerDagRunOperator
+from include.notification import notify_dag_failure
+from include.spotify.spotify_eps import SpotifyAPI
 from airflow.sdk import Variable
 
 s3_bucket = Variable.get("SP_S3_BUCKET")
@@ -100,13 +102,20 @@ def union_parquet_files(s3_key: str, s3_bucket: str, s3_union_key: str, keep_col
     schedule="15 20 * * *",
     default_args={"retries": 2, "retry_delay": duration(minutes=1)},
     catchup=False,
+    on_failure_callback=notify_dag_failure,
 )
 def spotify_eps():
     file_path = spotify_api_load(regions)
     upload_task = upload_to_s3(file_path, s3_key, s3_bucket)
     union_task = union_parquet_files(s3_key, s3_bucket, s3_union_key, keep_cols)
+    trigger_dbt = TriggerDagRunOperator(
+        task_id="trigger_duck_dbt",
+        trigger_dag_id="spotify_duck_dbt",
+        conf={"s3_bucket": s3_bucket},
+        wait_for_completion=False,
+    )
     
-    file_path >> upload_task >> union_task
+    file_path >> upload_task >> [union_task, trigger_dbt]
 
 
 

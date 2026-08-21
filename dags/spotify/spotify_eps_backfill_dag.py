@@ -6,8 +6,9 @@ from datetime import date
 from pendulum import datetime, duration
 from airflow.sdk import Param, dag, task
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
-from airflow.exceptions import AirflowException
-from spotify.include.spotify_eps import SpotifyAPI
+from airflow.sdk.exceptions import AirflowException
+from include.notification import notify_dag_failure
+from include.spotify.spotify_eps import SpotifyAPI
 from airflow.sdk import Variable
 from airflow.utils.log.logging_mixin import LoggingMixin
 from airflow.task.trigger_rule import TriggerRule
@@ -122,6 +123,7 @@ def cleanup_temp_dir(tmp_dir: str):
     schedule=None,
     default_args={"retries": 2, "retry_delay": duration(minutes=1)},
     catchup=False,
+    on_failure_callback=notify_dag_failure,
     params=params,
 )
 def spotify_eps_backfill():

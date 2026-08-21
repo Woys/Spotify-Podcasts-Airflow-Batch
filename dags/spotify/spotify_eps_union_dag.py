@@ -4,7 +4,8 @@ import pandas as pd
 from pendulum import datetime, duration
 from airflow.sdk import dag, task
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
-from spotify.include.spotify_eps import SpotifyAPI
+from include.notification import notify_dag_failure
+from include.spotify.spotify_eps import SpotifyAPI
 from airflow.sdk import Variable
 
 s3_bucket = Variable.get("SP_S3_BUCKET")
@@ -79,6 +80,7 @@ def union_parquet_files(s3_key: str, s3_bucket: str, s3_union_key: str, keep_col
     schedule=None,
     default_args={"retries": 2, "retry_delay": duration(minutes=1)},
     catchup=False,
+    on_failure_callback=notify_dag_failure,
 )
 def spotify_eps_union():
     union_task = union_parquet_files(s3_key, s3_bucket, s3_union_key, keep_cols)

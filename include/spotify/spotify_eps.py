@@ -1,3 +1,5 @@
+"""Spotify API helpers for Spotify DAGs."""
+
 try:
     from airflow.sdk import Variable
 except Exception:  # pragma: no cover - fallback for newer/partial Airflow layouts
@@ -51,6 +53,8 @@ class Episodes(BaseModel):
     episodes: List[Optional[Episode]]
 
 class SpotifyAPI:
+    request_timeout_seconds = 30
+
     def __init__(self):
         self.client_id = Variable.get("SP_CLIENT_ID")
         self.client_secret = Variable.get("SP_CLIENT_SECRET")
@@ -70,7 +74,12 @@ class SpotifyAPI:
         }
 
         data = {"grant_type": "client_credentials"}
-        result = post(url, headers=headers, data=data)
+        result = post(
+            url,
+            headers=headers,
+            data=data,
+            timeout=self.request_timeout_seconds,
+        )
         json_result = json.loads(result.content)
         return json_result["access_token"]
 
@@ -84,7 +93,12 @@ class SpotifyAPI:
             headers = {"Referer": "https://podcastcharts.byspotify.com/"}
 
             try:
-                response = get(url, headers=headers, params=params)
+                response = get(
+                    url,
+                    headers=headers,
+                    params=params,
+                    timeout=self.request_timeout_seconds,
+                )
                 response.raise_for_status()
                 data = response.json()
                 self.podcastchart_data = [PodcastChartItem(**item) for item in data]
@@ -100,7 +114,11 @@ class SpotifyAPI:
             headers = self._get_auth_header()
 
             try:
-                response = get(url_query, headers=headers)
+                response = get(
+                    url_query,
+                    headers=headers,
+                    timeout=self.request_timeout_seconds,
+                )
                 response.raise_for_status()
                 data = response.json()
                 self.episode_data[episode_ids] = Episodes(**data)

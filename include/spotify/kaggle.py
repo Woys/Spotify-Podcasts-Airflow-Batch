@@ -1,16 +1,17 @@
+"""Kaggle helpers for Spotify DAGs."""
+
 try:
     from airflow.sdk import Variable
 except Exception:  # pragma: no cover - fallback for newer/partial Airflow layouts
     Variable = None  # type: ignore[assignment]
 
 try:
-    from airflow.exceptions import AirflowException
+    from airflow.sdk.exceptions import AirflowException
 except Exception:  # pragma: no cover
     class AirflowException(Exception):
         pass
 from datetime import date
 import logging
-import sys
 import os
 import json
 from zipfile import ZipFile
@@ -84,13 +85,16 @@ def create_kaggle_dataset(kaggle_folder: str, logger: logging.Logger) -> None:
     zip_and_delete_csv_files(kaggle_folder, logger)
     logger.info('Starting to upload to Kaggle')
     try:
-        files = subprocess.run(
-            f"ls {kaggle_folder}", shell=True, check=True, capture_output=True, text=True)
-        logger.info(f"Files: {files.stdout}")
+        files = sorted(os.listdir(kaggle_folder))
+        logger.info("Files: %s", ", ".join(files))
 
-        command = f"PYTHONWARNINGS=\"ignore\" kaggle datasets create -p '{kaggle_folder}'"
-        result = subprocess.run(command, shell=True,
-                                check=True, capture_output=True, text=True)
+        result = subprocess.run(
+            ["kaggle", "datasets", "create", "-p", kaggle_folder],
+            check=True,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "PYTHONWARNINGS": "ignore"},
+        )
         logger.info(f"Command succeeded: {result.stdout}")
     except subprocess.CalledProcessError as e:
         logger.error(f"Command failed with error: stderr={e.stderr}, stdout={e.stdout}")
@@ -102,14 +106,26 @@ def update_kaggle_dataset(kaggle_folder: str, logger: logging.Logger) -> None:
     zip_and_delete_csv_files(kaggle_folder, logger)
     logger.info('Starting to upload to Kaggle')
     try:
-        files = subprocess.run(
-            f"ls {kaggle_folder}", shell=True, check=True, capture_output=True, text=True)
-        logger.info(f"Files: {files.stdout}")
+        files = sorted(os.listdir(kaggle_folder))
+        logger.info("Files: %s", ", ".join(files))
 
-        command = f"PYTHONWARNINGS=\"ignore\" kaggle datasets version -p '{
-            kaggle_folder}' -m '{today} Update' -r zip"
-        result = subprocess.run(command, shell=True,
-                                check=True, capture_output=True, text=True)
+        result = subprocess.run(
+            [
+                "kaggle",
+                "datasets",
+                "version",
+                "-p",
+                kaggle_folder,
+                "-m",
+                f"{today} Update",
+                "-r",
+                "zip",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "PYTHONWARNINGS": "ignore"},
+        )
         logger.info(f"Command succeeded: {result.stdout}")
     except subprocess.CalledProcessError as e:
         logger.error(f"Command failed with error: stderr={e.stderr}, stdout={e.stdout}")
@@ -120,9 +136,13 @@ def upload_kaggle_dataset(dataset_id: str, logger: logging.Logger) -> None:
     """Downloads a Kaggle dataset."""
     logger.info('Starting to download dataset from Kaggle')
     try:
-        command = f"PYTHONWARNINGS=\"ignore\" kaggle datasets download {dataset_id}"
-        result = subprocess.run(command, shell=True,
-                                check=True, capture_output=True, text=True)
+        result = subprocess.run(
+            ["kaggle", "datasets", "download", dataset_id],
+            check=True,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "PYTHONWARNINGS": "ignore"},
+        )
         logger.info(f"Command succeeded: {result.stdout}")
     except subprocess.CalledProcessError as e:
         logger.error(f"Command failed with error: stderr={e.stderr}, stdout={e.stdout}")
