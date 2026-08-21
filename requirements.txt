@@ -3,6 +3,7 @@ pydantic == 2.12.5
 pytest>=9.0.3,<10
 pytest-cov>=5,<7
 pandas==2.3.3
+pyarrow==15.0.2
 apache-airflow==3.3.1
 apache-airflow-providers-amazon==9.34.0
 apache-airflow-providers-smtp==3.0.3
