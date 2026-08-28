@@ -13,26 +13,18 @@ s3_key = 'top-charts/'
 regions = ["ar","au","at","br","ca","cl" ,"co","fr","de","in","id","ie","it","jp","mx","nz","ph","pl","es","nl","gb","us"]
 
 @task
-def spotify_chart_load(regions):
-    tmpdirname = tempfile.mkdtemp()
-    spotify_api = SpotifyAPI()
-    result_df = spotify_api.get_transformed_podcastcharts(regions=regions)
-    file_name = f"top_charts_{date.today().strftime('%Y-%m-%d')}.parquet"
-    file_path = os.path.join(tmpdirname, file_name)
-    result_df.to_parquet(file_path, index=False)
-    print(f"Saved locally to {file_path}")
-    return file_path
+def build_and_upload_chart(regions, s3_key: str, s3_bucket: str):
+    with tempfile.TemporaryDirectory(prefix="spotify_charts_") as tmpdirname:
+        spotify_api = SpotifyAPI()
+        result_df = spotify_api.get_transformed_podcastcharts(regions=regions)
+        file_name = f"top_charts_{date.today().strftime('%Y-%m-%d')}.parquet"
+        file_path = os.path.join(tmpdirname, file_name)
+        result_df.to_parquet(file_path, index=False)
+        s3 = S3Hook(aws_conn_id="aws_conn")
+        output_key = os.path.join(s3_key, file_name)
+        s3.load_file(filename=file_path, key=output_key, bucket_name=s3_bucket, replace=True)
+        print(f"Uploaded to s3://{s3_bucket}/{output_key}")
 
-@task
-def upload_to_s3(file_path: str, s3_key: str, s3_bucket: str):
-    s3 = S3Hook(aws_conn_id='aws_conn')
-    s3_key = os.path.join(s3_key, os.path.basename(file_path))
-    s3.load_file(filename=file_path, key=s3_key, bucket_name=s3_bucket, replace=True)
-    print(f"Uploaded to s3://{s3_bucket}/{s3_key}")
-    
-    if os.path.exists(file_path):
-        os.remove(file_path)
-        print(f"Deleted local file {file_path}")
 
 @dag(
     start_date=datetime(2024, 9, 1),
@@ -43,11 +35,7 @@ def upload_to_s3(file_path: str, s3_key: str, s3_bucket: str):
     on_failure_callback=notify_dag_failure,
 )
 def spotify_charts():
-    file_path = spotify_chart_load(regions)
-    upload_task = upload_to_s3(file_path, s3_key, s3_bucket)
-    
-    file_path >> upload_task
-
+    build_and_upload_chart(regions, s3_key, s3_bucket)
 
 
 spotify_charts()

@@ -23,26 +23,18 @@ keep_cols = ['date', 'rank', 'region', 'chartRankMove', 'episodeUri', 'showUri',
             'explicit', 'languages', 'release_date', 'show.media_type', 'show.total_episodes']
 
 @task
-def spotify_api_load(regions):
-    tmpdirname = tempfile.mkdtemp()
-    spotify_api = SpotifyAPI()
-    result_df = spotify_api.get_charts_eps(regions=regions)
-    file_name = f"top_podcasts_{date.today().strftime('%Y-%m-%d')}.parquet"
-    file_path = os.path.join(tmpdirname, file_name)
-    result_df.to_parquet(file_path, index=False)
-    print(f"Saved locally to {file_path}")
-    return file_path
+def build_and_upload_episodes(regions, s3_key: str, s3_bucket: str):
+    with tempfile.TemporaryDirectory(prefix="spotify_eps_") as tmpdirname:
+        spotify_api = SpotifyAPI()
+        result_df = spotify_api.get_charts_eps(regions=regions)
+        file_name = f"top_podcasts_{date.today().strftime('%Y-%m-%d')}.parquet"
+        file_path = os.path.join(tmpdirname, file_name)
+        result_df.to_parquet(file_path, index=False)
+        s3 = S3Hook(aws_conn_id="aws_conn")
+        output_key = os.path.join(s3_key, file_name)
+        s3.load_file(filename=file_path, key=output_key, bucket_name=s3_bucket, replace=True)
+        print(f"Uploaded to s3://{s3_bucket}/{output_key}")
 
-@task
-def upload_to_s3(file_path: str, s3_key: str, s3_bucket: str):
-    s3 = S3Hook(aws_conn_id='aws_conn')
-    s3_key = os.path.join(s3_key, os.path.basename(file_path))
-    s3.load_file(filename=file_path, key=s3_key, bucket_name=s3_bucket, replace=True)
-    print(f"Uploaded to s3://{s3_bucket}/{s3_key}")
-    
-    if os.path.exists(file_path):
-        os.remove(file_path)
-        print(f"Deleted local file {file_path}")
 
 @task
 def union_parquet_files(s3_key: str, s3_bucket: str, s3_union_key: str, keep_cols: list[str]):
@@ -105,8 +97,7 @@ def union_parquet_files(s3_key: str, s3_bucket: str, s3_union_key: str, keep_col
     on_failure_callback=notify_dag_failure,
 )
 def spotify_eps():
-    file_path = spotify_api_load(regions)
-    upload_task = upload_to_s3(file_path, s3_key, s3_bucket)
+    upload_task = build_and_upload_episodes(regions, s3_key, s3_bucket)
     union_task = union_parquet_files(s3_key, s3_bucket, s3_union_key, keep_cols)
     trigger_dbt = TriggerDagRunOperator(
         task_id="trigger_duck_dbt",
@@ -115,7 +106,7 @@ def spotify_eps():
         wait_for_completion=False,
     )
     
-    file_path >> upload_task >> [union_task, trigger_dbt]
+    upload_task >> [union_task, trigger_dbt]
 
 
 

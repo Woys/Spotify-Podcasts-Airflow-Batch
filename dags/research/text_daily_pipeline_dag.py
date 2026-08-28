@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import tempfile
 from pathlib import Path
 
@@ -20,12 +19,10 @@ from include.research.research_pipeline import (
     ensure_non_empty_bucket,
     normalize_records,
     parse_search_terms,
-    read_json_payload,
     merge_daily_datasets_to_s3,
     run_text_ingest_records,
     should_fail_pipeline,
     upload_artifacts_to_s3,
-    write_json_payload,
     write_dataset_parquet,
 )
 
@@ -92,106 +89,31 @@ def build_ingestion_config() -> dict:
 
 
 @task
-def run_text_ingest(config: dict) -> str:
+def process_and_upload(config: dict) -> dict:
     records, summary = run_text_ingest_records(config["fetcher_specs"])
-
     if should_fail_pipeline(records, summary):
+        raise RuntimeError("All sources failed and no records were produced")
+
+    normalized_records = normalize_records(records)
+    filtered_records = dedupe_and_quality_filter(normalized_records)
+    min_rows = int(config.get("min_rows_to_publish", 1))
+    if len(filtered_records) < min_rows:
         raise RuntimeError(
-            "All sources failed and no records were produced",
+            f"Refusing to publish low-volume dataset: {len(filtered_records)} rows < required {min_rows}"
         )
 
-    file_name = f"research_raw_{config['run_date']}.json"
-    payload_path = os.path.join(tempfile.mkdtemp(), file_name)
-    return write_json_payload(
-        payload_path,
-        {
-            "run_date": config["run_date"],
-            "summary": summary,
-            "records": records,
-        },
-    )
-
-
-@task
-def normalize_payload(raw_payload_path: str) -> str:
-    payload = read_json_payload(raw_payload_path)
-    normalized_records = normalize_records(payload["records"])
-
-    normalized_path = os.path.join(
-        tempfile.mkdtemp(),
-        f"research_normalized_{payload['run_date']}.json",
-    )
-
-    return write_json_payload(
-        normalized_path,
-        {
-            "run_date": payload["run_date"],
-            "summary": payload["summary"],
-            "records": normalized_records,
-        },
-    )
-
-
-@task
-def dedupe_and_filter_payload(normalized_payload_path: str) -> str:
-    payload = read_json_payload(normalized_payload_path)
-    filtered_records = dedupe_and_quality_filter(payload["records"])
-
-    filtered_path = os.path.join(
-        tempfile.mkdtemp(),
-        f"research_filtered_{payload['run_date']}.json",
-    )
-
-    return write_json_payload(
-        filtered_path,
-        {
-            "run_date": payload["run_date"],
-            "summary": payload["summary"],
-            "records": filtered_records,
-        },
-    )
-
-
-@task
-def write_dataset_artifacts(filtered_payload_path: str, config: dict) -> dict:
-    payload = read_json_payload(filtered_payload_path)
-    run_date = payload["run_date"]
-    min_rows_to_publish = int(config.get("min_rows_to_publish", 1))
-    row_count = len(payload["records"])
-    if row_count < min_rows_to_publish:
-        raise RuntimeError(
-            f"Refusing to publish low-volume dataset: {row_count} rows < required {min_rows_to_publish}"
-        )
-    keys = build_s3_keys(run_date)
-
-    output_dir = Path(tempfile.mkdtemp())
-    dataset_path = output_dir / "dataset.parquet"
-    write_dataset_parquet(payload["records"], str(dataset_path))
-
+    keys = build_s3_keys(config["run_date"])
     manifest = build_manifest(
-        run_date=run_date,
-        records=payload["records"],
-        summary=payload["summary"],
-        keys=keys,
+        run_date=config["run_date"], records=filtered_records,
+        summary=summary, keys=keys,
     )
-
-    return {
-        "run_date": run_date,
-        "keys": keys,
-        "summary": payload["summary"],
-        "manifest": manifest,
-        "dataset_path": str(dataset_path),
-    }
-
-
-@task
-def upload_to_s3(artifacts: dict, config: dict) -> dict:
-    return upload_artifacts_to_s3(
-        s3_bucket=config["s3_bucket"],
-        dataset_path=artifacts["dataset_path"],
-        manifest=artifacts["manifest"],
-        keys=artifacts["keys"],
-    )
+    with tempfile.TemporaryDirectory(prefix="research_daily_") as output_dir:
+        dataset_path = str(Path(output_dir) / "dataset.parquet")
+        write_dataset_parquet(filtered_records, dataset_path)
+        return upload_artifacts_to_s3(
+            s3_bucket=config["s3_bucket"], dataset_path=dataset_path,
+            manifest=manifest, keys=keys,
+        )
 
 
 @task
@@ -212,11 +134,7 @@ def merge_daily_datasets(config: dict) -> dict:
 )
 def text_daily_pipeline():
     config = build_ingestion_config()
-    raw_payload = run_text_ingest(config)
-    normalized_payload = normalize_payload(raw_payload)
-    filtered_payload = dedupe_and_filter_payload(normalized_payload)
-    artifacts = write_dataset_artifacts(filtered_payload, config)
-    uploaded = upload_to_s3(artifacts, config)
+    uploaded = process_and_upload(config)
     merged = merge_daily_datasets(config)
     uploaded >> merged
 

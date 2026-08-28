@@ -52,6 +52,11 @@ x-airflow-common:
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
   # image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.3.1}
   build: .
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
   env_file:
     - path: ./.env
       required: true
@@ -99,6 +104,11 @@ x-airflow-common:
 
 services:
   postgres:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     image: postgres:13
     environment:
       POSTGRES_USER: airflow
@@ -114,6 +124,11 @@ services:
     restart: always
 
   redis:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     # Redis is limited to 7.2-bookworm due to licencing change
     # https://redis.io/blog/redis-adopts-dual-source-available-licensing/
     image: redis:7.2-bookworm

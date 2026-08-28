@@ -16,6 +16,8 @@ import os
 import json
 from zipfile import ZipFile
 import subprocess
+import tempfile
+from collections.abc import Callable
 
 
 def _resolve_var(name: str, default: str = "") -> str:
@@ -37,6 +39,23 @@ os.environ["KAGGLE_USERNAME"] = _resolve_var("KAGGLE_USERNAME")
 os.environ["KAGGLE_KEY"] = _resolve_var("KAGGLE_KEY")
 
 today = date.today()
+
+
+def run_kaggle_staging_workflow(
+    download_csv: Callable[[str], None],
+    upload_dataset: Callable[[str, logging.Logger], None],
+    logger: logging.Logger,
+    dataset_id: str,
+    title: str,
+    license: str = "CC0-1.0",
+    file_name: str = "dataset.csv",
+    temp_prefix: str = "spotify_kaggle_",
+) -> None:
+    """Download, prepare, and upload a dataset in one self-cleaning workspace."""
+    with tempfile.TemporaryDirectory(prefix=temp_prefix) as staging_dir:
+        download_csv(os.path.join(staging_dir, file_name))
+        create_kaggle_metadata(staging_dir, logger, dataset_id, title, license)
+        upload_dataset(staging_dir, logger)
 
 
 def zip_and_delete_csv_files(directory_path: str, logger: logging.Logger) -> None:

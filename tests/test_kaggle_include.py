@@ -202,3 +202,57 @@ def test_upload_kaggle_dataset_wraps_subprocess_errors(monkeypatch: pytest.Monke
 
     with pytest.raises(kaggle.AirflowException, match="bad"):
         kaggle.upload_kaggle_dataset("owner/dataset", logger)
+
+
+def test_staging_workflow_removes_directory_after_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    kaggle = _load_kaggle_module(monkeypatch)
+    logger = _logger()
+    observed = {}
+
+    def download(destination: str) -> None:
+        observed["directory"] = Path(destination).parent
+        Path(destination).write_text("a,b\n1,2\n", encoding="utf-8")
+
+    def upload(directory: str, _logger) -> None:
+        assert Path(directory).exists()
+
+    kaggle.run_kaggle_staging_workflow(
+        download, upload, logger, "owner/dataset", "title"
+    )
+    assert not observed["directory"].exists()
+
+
+def test_staging_workflow_removes_directory_after_failed_download(monkeypatch: pytest.MonkeyPatch) -> None:
+    kaggle = _load_kaggle_module(monkeypatch)
+    logger = _logger()
+    observed = {}
+
+    def download(destination: str) -> None:
+        observed["directory"] = Path(destination).parent
+        Path(destination).write_text("partial", encoding="utf-8")
+        raise OSError("download failed")
+
+    with pytest.raises(OSError, match="download failed"):
+        kaggle.run_kaggle_staging_workflow(
+            download, Mock(), logger, "owner/dataset", "title"
+        )
+    assert not observed["directory"].exists()
+
+
+def test_staging_workflow_removes_directory_after_failed_kaggle_upload(monkeypatch: pytest.MonkeyPatch) -> None:
+    kaggle = _load_kaggle_module(monkeypatch)
+    logger = _logger()
+    observed = {}
+
+    def download(destination: str) -> None:
+        Path(destination).write_text("a,b\n1,2\n", encoding="utf-8")
+
+    def upload(directory: str, _logger) -> None:
+        observed["directory"] = Path(directory)
+        raise kaggle.AirflowException("upload failed")
+
+    with pytest.raises(kaggle.AirflowException, match="upload failed"):
+        kaggle.run_kaggle_staging_workflow(
+            download, upload, logger, "owner/dataset", "title"
+        )
+    assert not observed["directory"].exists()
