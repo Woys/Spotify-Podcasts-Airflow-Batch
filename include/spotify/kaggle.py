@@ -14,8 +14,9 @@ from datetime import date
 import logging
 import os
 import json
-from zipfile import ZipFile
+from zipfile import ZIP_DEFLATED, ZipFile
 import subprocess
+import shutil
 import tempfile
 from collections.abc import Callable
 
@@ -56,6 +57,17 @@ def run_kaggle_staging_workflow(
         download_csv(os.path.join(staging_dir, file_name))
         create_kaggle_metadata(staging_dir, logger, dataset_id, title, license)
         upload_dataset(staging_dir, logger)
+
+
+def stream_s3_object_to_zip(s3_object, zip_path: str, csv_name: str) -> None:
+    """Stream an S3 object into a compressed ZIP without staging the source CSV."""
+    with ZipFile(zip_path, "w", compression=ZIP_DEFLATED, allowZip64=True) as archive:
+        with archive.open(csv_name, "w", force_zip64=True) as csv_entry:
+            body = s3_object.get()["Body"]
+            try:
+                shutil.copyfileobj(body, csv_entry, length=8 * 1024 * 1024)
+            finally:
+                body.close()
 
 
 def zip_and_delete_csv_files(directory_path: str, logger: logging.Logger) -> None:

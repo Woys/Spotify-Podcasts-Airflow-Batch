@@ -67,6 +67,36 @@ def test_zip_and_delete_csv_files_logs_when_zip_fails(tmp_path: Path, monkeypatc
     assert logger.error.call_count == 1
 
 
+def test_stream_s3_object_to_zip_avoids_source_csv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    kaggle = _load_kaggle_module(monkeypatch)
+    zip_path = tmp_path / "dataset.zip"
+
+    class Body:
+        def __init__(self) -> None:
+            self.data = memoryview(b"a,b\n1,2\n")
+
+        def read(self, size: int = -1) -> bytes:
+            if not self.data:
+                return b""
+            chunk = self.data[:size].tobytes()
+            self.data = self.data[len(chunk):]
+            return chunk
+
+        def close(self) -> None:
+            pass
+
+    class S3Object:
+        def get(self):
+            return {"Body": Body()}
+
+    kaggle.stream_s3_object_to_zip(S3Object(), str(zip_path), "dataset.csv")
+
+    assert not (tmp_path / "dataset.csv").exists()
+    with ZipFile(zip_path, "r") as archive:
+        assert archive.namelist() == ["dataset.csv"]
+        assert archive.read("dataset.csv") == b"a,b\n1,2\n"
+
+
 def test_create_kaggle_metadata_creates_expected_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     kaggle = _load_kaggle_module(monkeypatch)
     logger = _logger()

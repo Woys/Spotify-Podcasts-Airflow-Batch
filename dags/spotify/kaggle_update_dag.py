@@ -2,7 +2,11 @@ from pendulum import datetime, duration
 from airflow.sdk import dag, task
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from include.notification import notify_dag_failure
-from include.spotify.kaggle import run_kaggle_staging_workflow, update_kaggle_dataset
+from include.spotify.kaggle import (
+    run_kaggle_staging_workflow,
+    stream_s3_object_to_zip,
+    update_kaggle_dataset,
+)
 from airflow.sdk import Variable
 from airflow.utils.log.logging_mixin import LoggingMixin
 
@@ -26,12 +30,14 @@ def update_kaggle_from_s3(s3_key: str, s3_bucket: str, file_name: str):
         )
 
     def download_csv(destination: str) -> None:
-        s3.get_key(key=csv_key, bucket_name=s3_bucket).download_file(destination)
-        logger.info("Loaded CSV into temporary Kaggle staging directory")
+        s3_object = s3.get_key(key=csv_key, bucket_name=s3_bucket)
+        stream_s3_object_to_zip(s3_object, destination, file_name)
+        logger.info("Streamed S3 CSV into temporary Kaggle ZIP")
 
     run_kaggle_staging_workflow(
         download_csv, update_kaggle_dataset, logger, DATASET_ID,
-        DATASET_TITLE, LICENSE, file_name, "spotify_kaggle_update_",
+        DATASET_TITLE, LICENSE, file_name.replace(".csv", ".zip"),
+        "spotify_kaggle_update_",
     )
 
 
